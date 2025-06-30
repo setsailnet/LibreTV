@@ -1,0 +1,46 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    # 每天 UTC 时间凌晨 3 点运行
+    # （相当于日本时间 (JST) 中午 12 点）
+    - cron: "0 3 * * *"
+  workflow_dispatch: # 允许手动触发
+
+permissions:
+  contents: write # 授予写入内容权限，以便推送到仓库
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest # 在 Ubuntu 最新版本上运行
+    steps:
+      - name: Checkout repository # 检出你的仓库代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 获取完整历史记录，以便进行合并
+
+      - name: Add upstream remote and fetch # 添加上游远程仓库并获取更新
+        run: |
+          git remote add upstream https://github.com/LibreSpark/LibreTV.git || true # 如果已存在，则忽略错误
+          git fetch upstream
+
+      - name: Merge upstream into main (handle conflicts gracefully) # 合并上游的 main 分支到你的 main 分支
+        run: |
+          # 尝试合并。如果失败（例如，由于冲突），则打印消息并以成功状态退出，
+          # 表明需要手动介入。
+          git merge upstream/main -m "🔄 Sync from upstream" || {
+            echo "Merge failed. Possibly due to conflicts. Manual intervention required.";
+            exit 0; # 以成功状态退出，防止工作流显示为失败
+          }
+        env:
+          # 设置 GIT_COMMITTER_NAME 和 GIT_COMMITTER_EMAIL 来定义合并提交的作者信息
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+
+      - name: Push changes # 推送合并后的更改到你的仓库
+        # 只有在合并成功（即没有执行 exit 0）时，这个步骤才会实际推送更改
+        run: |
+          git push origin main
+        env:
+          # 使用 GITHUB_TOKEN 进行认证
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
